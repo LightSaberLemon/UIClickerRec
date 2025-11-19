@@ -2,10 +2,10 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
   Left = 373
   Height = 417
   Top = 185
-  Width = 665
+  Width = 749
   Caption = 'UIClicker Rec'
   ClientHeight = 417
-  ClientWidth = 665
+  ClientWidth = 749
   Color = 16444382
   Constraints.MinHeight = 376
   Constraints.MinWidth = 502
@@ -15,7 +15,7 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
   object chkRec: TCheckBox
     Left = 8
     Height = 19
-    Top = 8
+    Top = 7
     Width = 37
     Caption = 'Rec'
     TabOrder = 0
@@ -174,7 +174,7 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     Left = 8
     Height = 120
     Top = 289
-    Width = 496
+    Width = 592
     Anchors = [akLeft, akBottom]
     Lines.Strings = (
       'memLog'
@@ -188,8 +188,9 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     Left = 8
     Height = 129
     Top = 152
-    Width = 496
+    Width = 592
     Anchors = [akTop, akLeft, akBottom]
+    Colors.UnfocusedSelectionColor = clGradientInactiveCaption
     DefaultText = 'Node'
     Header.AutoSizeIndex = 0
     Header.Columns = <    
@@ -239,9 +240,15 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
         Position = 7
         Text = 'Global XY'
         Width = 100
+      end    
+      item
+        MinWidth = 300
+        Position = 8
+        Text = 'Bmp path'
+        Width = 300
       end>
     Header.Height = 21
-    Header.Options = [hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible]
+    Header.Options = [hoColumnResize, hoDblClickResize, hoDrag, hoShowSortGlyphs, hoVisible]
     StateImages = imglstActions16
     TabOrder = 8
     TreeOptions.SelectionOptions = [toFullRowSelect, toMultiSelect]
@@ -263,11 +270,11 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     OnClick = btnCopySelectedActionsToClipboardClick
   end
   object btnClearRecording: TButton
-    Left = 351
+    Left = 344
     Height = 25
     Top = 8
-    Width = 139
-    Caption = 'Clear recording...'
+    Width = 73
+    Caption = 'Clear rec...'
     TabOrder = 10
     OnClick = btnClearRecordingClick
   end
@@ -280,9 +287,9 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     TabOrder = 11
   end
   object imgPreview: TImage
-    Left = 512
+    Left = 605
     Height = 140
-    Top = 7
+    Top = 4
     Width = 140
     AutoSize = True
   end
@@ -298,6 +305,104 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     ShowHint = True
     State = cbChecked
     TabOrder = 12
+  end
+  object btnSetSelectedFindSubControlActionsTo: TButton
+    Left = 288
+    Height = 25
+    Top = 120
+    Width = 216
+    Caption = 'Set selected findSubControl actions to'
+    TabOrder = 13
+    OnClick = btnSetSelectedFindSubControlActionsToClick
+  end
+  object cmbNewMatchCriteria: TComboBoxEx
+    Left = 506
+    Height = 22
+    Top = 120
+    Width = 94
+    Images = imglstUsedMatchCriteriaSub
+    ItemHeight = 16
+    ItemsEx = <    
+      item
+        Caption = 'Txt'
+        ImageIndex = 0
+      end    
+      item
+        Caption = 'Bmp'
+        ImageIndex = 1
+      end    
+      item
+        Caption = 'Pmtv'
+        ImageIndex = 2
+      end>
+    ItemIndex = 1
+    TabOrder = 14
+  end
+  object btnSaveBmpsAs: TButton
+    Left = 506
+    Height = 25
+    Top = 86
+    Width = 94
+    Caption = 'Save sel bmps'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 15
+    OnClick = btnSaveBmpsAsClick
+  end
+  object btnSetBmpDir: TButton
+    Left = 506
+    Height = 25
+    Hint = 'Bmps dir'
+    Top = 54
+    Width = 94
+    Caption = 'Set bmps dir...'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 16
+    OnClick = btnSetBmpDirClick
+  end
+  object btnLoadRec: TButton
+    Left = 429
+    Height = 25
+    Top = 8
+    Width = 75
+    Caption = 'Load rec...'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 17
+    OnClick = btnLoadRecClick
+  end
+  object btnSaveRec: TButton
+    Left = 506
+    Height = 25
+    Top = 8
+    Width = 78
+    Caption = 'Save rec'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 18
+    OnClick = btnSaveRecClick
+  end
+  object spdbtnExtraSave: TSpeedButton
+    Left = 582
+    Height = 25
+    Top = 8
+    Width = 18
+    Font.Color = clWindowText
+    Glyph.Data = {
+      EA000000424DEA0000000000000036000000280000000B000000050000000100
+      180000000000B400000000000000000000000000000000000000FFFFFFFFFFFF
+      FFFFFFFFFFFFFFFFFF39841AFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000FFFF
+      FFFFFFFFFFFFFFFFFFFF39841A39841A39841AFFFFFFFFFFFFFFFFFFFFFFFF00
+      0000FFFFFFFFFFFFFFFFFF39841A39841A39841A39841A39841AFFFFFFFFFFFF
+      FFFFFF000000FFFFFFFFFFFF39841A39841A39841A39841A39841A39841A3984
+      1AFFFFFFFFFFFF000000FFFFFF39841A39841A39841A39841A39841A39841A39
+      841A39841A39841AFFFFFF000000
+    }
+    ShowHint = True
+    ParentFont = False
+    ParentShowHint = False
+    OnClick = spdbtnExtraSaveClick
   end
   object tmrRec: TTimer
     Enabled = False
@@ -437,5 +542,41 @@ object frmUIClickerRecMain: TfrmUIClickerRecMain
     OnTimer = tmrStartupTimer
     Left = 264
     Top = 296
+  end
+  object imglstUsedMatchCriteriaSub: TImageList
+    Left = 536
+    Top = 160
+    Bitmap = {
+      4C7A040000001000000010000000430100000000000078DAED96418A02311045
+      7302972E443722B8F71C1EC7B3086E5DCE42DA856B99DDF411DC8B0E82780333
+      9366BE146525955433A0D00DDFB476DEFF4977A54D75BCB9C9F0EA2DAAFED87A
+      E3A34AF1533F7E9C4B87C682A779E1D0F2C1D27CF880D7722D3C674B78899578
+      DA6A2CE773C79CCBA3CF6CD18F2A37D739F7A4583E67695EE052F9A9B9525E9A
+      BF76AF52BCC6C6F8B0067358F0B4EDD54DB9B977D6E5B0F25681FF5E3B93CEFB
+      2F0F7E74DA1529C6A3B6E977E95CE2A5BEBCB5F09CFDAFFCB6F36F73FF2DA275
+      18BC4AF42AEB27BC3F6263E4EF5B7EBD227B07890BEF172AC907CF033E1297F2
+      E1B5011FCD033E526D96F8A0FF7C3B16051FFEBBC4BBE56754743C165EF2B1F0
+      41745E03F7D1A894472E78AAB6BCE64579EC13351FFEFC389FEBC3EB2CB577CE
+      F1086B30E5217951F6DDFFFF3B75EA64D3FDF7E307B9127EEB
+    }
+  end
+  object SelectDirectoryDialog1: TSelectDirectoryDialog
+    Left = 648
+    Top = 48
+  end
+  object OpenDialog1: TOpenDialog
+    Left = 679
+    Top = 156
+  end
+  object SaveDialog1: TSaveDialog
+    Left = 679
+    Top = 216
+  end
+  object pmExtraSave: TPopupMenu
+    Left = 648
+    object MenuItem_SaveRecordingAs: TMenuItem
+      Caption = 'Save recording as...'
+      OnClick = MenuItem_SaveRecordingAsClick
+    end
   end
 end

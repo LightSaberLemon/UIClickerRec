@@ -30,7 +30,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls,
-  StdCtrls, Spin, VirtualTrees, ClickerUtils, ImgList;
+  StdCtrls, Spin, VirtualTrees, ClickerUtils, ImgList, ComboEx, Buttons, Menus;
 
 type
   TExtraActionDetails = record
@@ -39,6 +39,7 @@ type
     Timestamp: TDateTime;
     GroupID: string; //all generated actions from an event should have the same ID
     ScrShot: TBitmap;
+    ScrShotPath: string; /////////////////////////////////// should be set on rec
   end;
 
   TExtraActionDetailsArr = array of TExtraActionDetails;
@@ -61,24 +62,37 @@ type
   TfrmUIClickerRecMain = class(TForm)
     btnCopySelectedActionsToClipboard: TButton;
     btnClearRecording: TButton;
+    btnSetSelectedFindSubControlActionsTo: TButton;
+    btnSaveBmpsAs: TButton;
+    btnSetBmpDir: TButton;
+    btnLoadRec: TButton;
+    btnSaveRec: TButton;
     chkIncludeFindSubControl: TCheckBox;
     chkIncludeThisRecorder: TCheckBox;
     chkUnconditionalScreenshots: TCheckBox;
     chkRec: TCheckBox;
     chkMouseMoveScreenshots1: TCheckBox;
+    cmbNewMatchCriteria: TComboBoxEx;
     grpMouseActions: TGroupBox;
     grpMouseButtonStates: TGroupBox;
+    imglstUsedMatchCriteriaSub: TImageList;
     imgPreview: TImage;
     imglstActions16: TImageList;
     lblMs1: TLabel;
     lblMs2: TLabel;
     memLog: TMemo;
+    MenuItem_SaveRecordingAs: TMenuItem;
+    OpenDialog1: TOpenDialog;
     pnlLeft: TPanel;
     pnlMouseMove: TPanel;
     pnlMiddle: TPanel;
     pnlMouseDrag: TPanel;
     pnlRight: TPanel;
+    pmExtraSave: TPopupMenu;
+    SaveDialog1: TSaveDialog;
+    SelectDirectoryDialog1: TSelectDirectoryDialog;
     shpRec: TShape;
+    spdbtnExtraSave: TSpeedButton;
     spnedtUnconditionalPeriod: TSpinEdit;
     spnedtMouseMovePeriod: TSpinEdit;
     tmrStartup: TTimer;
@@ -88,9 +102,16 @@ type
     vstRec: TVirtualStringTree;
     procedure btnClearRecordingClick(Sender: TObject);
     procedure btnCopySelectedActionsToClipboardClick(Sender: TObject);
+    procedure btnLoadRecClick(Sender: TObject);
+    procedure btnSaveBmpsAsClick(Sender: TObject);
+    procedure btnSaveRecClick(Sender: TObject);
+    procedure btnSetBmpDirClick(Sender: TObject);
+    procedure btnSetSelectedFindSubControlActionsToClick(Sender: TObject);
     procedure chkRecChange(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
+    procedure MenuItem_SaveRecordingAsClick(Sender: TObject);
+    procedure spdbtnExtraSaveClick(Sender: TObject);
     procedure tmrBlinkRecTimer(Sender: TObject);
     procedure tmrMouseMoveDebounceTimer(Sender: TObject);
     procedure tmrRecTimer(Sender: TObject);
@@ -140,10 +161,17 @@ type
     FAllRecs: TRecordingArr;
     FHitTimeStamp: QWord;
 
+    FProjectPath: string;
+    FSaveBmpDir: string;
+
+    procedure SetSaveBmpDir(Value: string);
+
     procedure AddToLog(s: string);
     procedure DisplayMouseButtonStates;
     function GetSelectedActions(var AActionsArr: TClkActionsRecArr): Integer;
     procedure CopySelectedActionsToClipboard;
+    procedure ClearRecording;
+    function GetBmpFnmByTk: string;
 
     procedure AddFindControlAction(var ATree: TCompRecArr; ACurrentNow: TDateTime; ALocalGroupID: string);
     procedure AddFindControlAndClickActions(var ATree, ASrcTree: TCompRecArr; AClickActionName: string; AMouseButton: TMouseButton; ACurrentNow: TDateTime);
@@ -158,12 +186,19 @@ type
     procedure LoadSettingsFromIni;
     procedure SaveSettingsToIni;
 
+    function GetBmpDirByProjectName: string;
+    procedure LoadProject;
+    procedure SaveProject;
+    function SetProjectPath: Boolean;
+
     procedure HandleOnLeftButtonDown;
     procedure HandleOnRightButtonDown;
     procedure HandleOnMiddleButtonDown;
     procedure HandleOnLeftButtonUp;
     procedure HandleOnRightButtonUp;
     procedure HandleOnMiddleButtonUp;
+
+    property SaveBmpDir: string read FSaveBmpDir write SetSaveBmpDir;
   public
 
   end;
@@ -189,6 +224,9 @@ const
   CSelectActionName = 'Select';
   CDragActionName = 'Drag';
 
+  CTemplateRecExt = '.clktmplrec';
+  CTemplateRecDialogFilter = 'Clicker Action Recording (*' + CTemplateRecExt + ')|*' + CTemplateRecExt + '|All Files (*.*)|*.*';
+
 
 { TfrmUIClickerRecMain }
 
@@ -209,6 +247,8 @@ begin
     Top := Ini.ReadInteger('Window', 'Top', Top);
     Width := Ini.ReadInteger('Window', 'Width', Width);
     Height := Ini.ReadInteger('Window', 'Height', Height);
+
+    SaveBmpDir := Ini.ReadString('Settings', 'SaveBmpDir', SaveBmpDir);
   finally
     Ini.Free;
   end;
@@ -226,9 +266,27 @@ begin
     Ini.WriteInteger('Window', 'Width', Width);
     Ini.WriteInteger('Window', 'Height', Height);
 
+    Ini.WriteString('Settings', 'SaveBmpDir', SaveBmpDir);
+
     Ini.UpdateFile;
   finally
     Ini.Free;
+  end;
+end;
+
+
+procedure TfrmUIClickerRecMain.SetSaveBmpDir(Value: string);
+begin
+  if FSaveBmpDir <> Value then
+  begin
+    FSaveBmpDir := Value;
+
+    if Length(FSaveBmpDir) > 0 then
+      if FSaveBmpDir[Length(FSaveBmpDir)] <> PathDelim then
+        FSaveBmpDir := FSaveBmpDir + PathDelim;
+
+    btnSetBmpDir.Hint := 'Directory where to save bitmaps of the selected FindSubControl actions:' + #13#10 + FSaveBmpDir;
+    btnSaveBmpsAs.Hint := 'Saves bitmaps of the selected FindSubControl actions to:' + #13#10 + FSaveBmpDir;
   end;
 end;
 
@@ -285,7 +343,7 @@ begin
 end;
 
 
-procedure TfrmUIClickerRecMain.btnClearRecordingClick(Sender: TObject);
+procedure TfrmUIClickerRecMain.ClearRecording;
 var
   i: Integer;
 begin
@@ -296,6 +354,15 @@ begin
   SetLength(FAllRecs[0].Details, 0);
   vstRec.RootNodeCount := 0;
   vstRec.Repaint;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnClearRecordingClick(Sender: TObject);
+begin
+  ClearRecording;
+  FProjectPath := '';
+  btnLoadRec.Hint := FProjectPath;
+  btnSaveRec.Hint := FProjectPath;
 end;
 
 
@@ -351,6 +418,243 @@ begin
 end;
 
 
+function TfrmUIClickerRecMain.GetBmpDirByProjectName: string;
+var
+  ExtProjFnm: string;
+begin
+  if FProjectPath = '' then
+  begin
+    Result := '';
+    Exit;
+  end;
+
+  ExtProjFnm := ExtractFileNameNoExt(FProjectPath);
+  Result := ExtractFileDir(FProjectPath) + PathDelim + ExtProjFnm + '_Bmp' + PathDelim;
+end;
+
+
+procedure TfrmUIClickerRecMain.LoadProject;
+var
+  Ini: TClkIniReadonlyFile;
+  Notes, IconPath: string;
+  i: Integer;
+  Suffix: string;
+begin
+  Ini := TClkIniReadonlyFile.Create(FProjectPath);
+  try
+    LoadTemplateToCustomActions_V2(Ini, FAllRecs[0].Actions, Notes, IconPath);
+
+    SetLength(FAllRecs[0].Details, Length(FAllRecs[0].Actions));
+    for i := 0 to Length(FAllRecs[0].Details) - 1 do
+    begin
+      Suffix := '_' + IntToStr(i);
+      FAllRecs[0].Details[i].ControlHandle := Ini.ReadInteger('Rec', 'ControlHandle' + Suffix, 0);
+      FAllRecs[0].Details[i].ClickPoint.X := Ini.ReadInteger('Rec', 'ClickPoint.X' + Suffix, 0);
+      FAllRecs[0].Details[i].ClickPoint.Y := Ini.ReadInteger('Rec', 'ClickPoint.Y' + Suffix, 0);
+      FAllRecs[0].Details[i].Timestamp := StrToFloat(Ini.ReadString('Rec', 'Timestamp' + Suffix, '0'));  //not portable unless FormatSettings param is provided
+      FAllRecs[0].Details[i].GroupID := Ini.ReadString('Rec', 'GroupID' + Suffix, '?');
+      FAllRecs[0].Details[i].ScrShotPath := Ini.ReadString('Rec', 'ScrShotPath' + Suffix, FSaveBmpDir + 'Bmp' + Suffix + '.bmp');
+
+      FAllRecs[0].Details[i].ScrShot := TBitmap.Create;
+      if FileExists(FAllRecs[0].Details[i].ScrShotPath) then
+        FAllRecs[0].Details[i].ScrShot.LoadFromFile(FAllRecs[0].Details[i].ScrShotPath)
+      else
+      begin
+        FAllRecs[0].Details[i].ScrShot.Width := 100;
+        FAllRecs[0].Details[i].ScrShot.Height := 30;
+        FAllRecs[0].Details[i].ScrShot.Canvas.Pen.Color := clRed;
+        FAllRecs[0].Details[i].ScrShot.Canvas.Brush.Color := clBlack;
+        FAllRecs[0].Details[i].ScrShot.Canvas.Rectangle(0, 0, FAllRecs[0].Details[i].ScrShot.Width, FAllRecs[0].Details[i].ScrShot.Height);
+        FAllRecs[0].Details[i].ScrShot.Canvas.TextOut(0, 0, 'File not found.');
+      end;
+    end;
+  finally
+    Ini.Free;
+  end;
+
+  vstRec.RootNodeCount := Length(FAllRecs[0].Details);
+  vstRec.Repaint;
+end;
+
+
+procedure TfrmUIClickerRecMain.SaveProject;
+var
+  Content: TStringList;
+  i: Integer;
+  Suffix, BmpDir, ExtProjFnm, DefaultBmpDir: string;
+begin
+  ExtProjFnm := ExtractFileNameNoExt(FProjectPath);
+  DefaultBmpDir := GetBmpDirByProjectName;
+
+  Content := TStringList.Create;
+  try
+    SaveTemplateWithCustomActionsToStringList_V2(Content, FAllRecs[0].Actions, '', '');
+    Content.Add('[Rec]');
+
+    for i := 0 to Length(FAllRecs[0].Details) - 1 do
+    begin
+      Suffix := '_' + IntToStr(i);
+      Content.Add('ControlHandle' + Suffix + '=' + IntToStr(FAllRecs[0].Details[i].ControlHandle));
+      Content.Add('ClickPoint.X' + Suffix + '=' + IntToStr(FAllRecs[0].Details[i].ClickPoint.X));
+      Content.Add('ClickPoint.Y' + Suffix + '=' + IntToStr(FAllRecs[0].Details[i].ClickPoint.Y));
+      Content.Add('Timestamp' + Suffix + '=' + FloatToStr(FAllRecs[0].Details[i].Timestamp));  //not portable unless FormatSettings param is provided
+      Content.Add('GroupID' + Suffix + '=' + FAllRecs[0].Details[i].GroupID);
+
+      BmpDir := ExtractFileDir(FAllRecs[0].Details[i].ScrShotPath);
+      if (BmpDir = '') or (BmpDir = '_Bmp') or (BmpDir = ExtProjFnm + '_Bmp') then
+      begin
+        BmpDir := DefaultBmpDir;
+        FAllRecs[0].Details[i].ScrShotPath := BmpDir + FAllRecs[0].Details[i].ScrShotPath;
+      end;
+
+      Content.Add('ScrShotPath' + Suffix + '=' + FAllRecs[0].Details[i].ScrShotPath);
+
+      CreateDirWithSubDirs(BmpDir);
+      FAllRecs[0].Details[i].ScrShot.SaveToFile(FAllRecs[0].Details[i].ScrShotPath);
+    end;
+
+    Content.Add('');
+    Content.SaveToFile(FProjectPath);
+  finally
+    Content.Free;
+  end;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnLoadRecClick(Sender: TObject);
+begin
+  if vstRec.RootNodeCount > 0 then
+    if MessageBox(Handle, 'Are you sure you want to discard the existing recording?', PChar(Caption), MB_YESNO) = IDNO then
+      Exit;
+
+  OpenDialog1.Filter := CTemplateRecDialogFilter;
+  if not OpenDialog1.Execute then
+    Exit;
+
+  FProjectPath := OpenDialog1.FileName;
+  btnLoadRec.Hint := FProjectPath;
+  btnSaveRec.Hint := FProjectPath;
+
+  ClearRecording;
+  LoadProject;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnSaveRecClick(Sender: TObject);
+begin
+  if FProjectPath = '' then
+    SetProjectPath;
+
+  if FProjectPath = '' then //saving canceled
+    Exit;
+
+  SaveProject;
+  vstRec.Repaint; //repaint, in case the bmp paths are updated
+end;
+
+
+function TfrmUIClickerRecMain.SetProjectPath: Boolean;
+begin
+  Result := False;
+  SaveDialog1.Filter := CTemplateRecDialogFilter;
+  if not SaveDialog1.Execute then
+    Exit;
+
+  FProjectPath := SaveDialog1.FileName;
+
+  if FProjectPath <> '' then
+    if Pos(UpperCase(CTemplateRecExt), UpperCase(FProjectPath)) = 0 then   //this should check for the end of path, not anywhere
+      FProjectPath := FProjectPath + CTemplateRecExt;
+
+  btnLoadRec.Hint := FProjectPath;
+  btnSaveRec.Hint := FProjectPath;
+  Result := True;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnSaveBmpsAsClick(Sender: TObject);
+var
+  Err, Fnm: string;
+  Node: PVirtualNode;
+begin
+  if not CreateDirWithSubDirs(FSaveBmpDir) then
+  begin
+    Err := 'Can''t create directory: ' + FSaveBmpDir;
+    AddToLog('Err');
+    MessageBox(Handle, PChar(Err), PChar(Caption), MB_ICONERROR);
+  end;
+
+  Node := vstRec.GetFirstSelected;
+  if Node = nil then
+    Exit;
+
+  repeat
+    if vstRec.Selected[Node] then
+      if FAllRecs[0].Actions[Node^.Index].ActionOptions.Action = acFindSubControl then
+      begin
+        try
+          if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles = ExtractFileName(FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles) then
+            FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles := FSaveBmpDir + FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles;
+
+          Fnm := FSaveBmpDir + ExtractFileName(FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles);
+          FAllRecs[0].Details[Node^.Index].ScrShot.SaveToFile(Fnm);
+        except
+          on E: Exception do
+            AddToLog('Ex saving bmp: "' + E.Message + '" on "' + Fnm + '".');
+        end;
+      end;
+
+    Node := Node^.NextSibling;
+  until Node = nil;
+
+  AddToLog('Done saving bmps for the selected Actions to ' + FSaveBmpDir);
+  vstRec.Repaint;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnSetBmpDirClick(Sender: TObject);
+begin
+  if not SelectDirectoryDialog1.Execute then
+    Exit;
+
+  SaveBmpDir := SelectDirectoryDialog1.FileName;
+end;
+
+
+procedure TfrmUIClickerRecMain.btnSetSelectedFindSubControlActionsToClick(
+  Sender: TObject);
+var
+  Node: PVirtualNode;
+begin
+  Node := vstRec.GetFirstSelected;
+  if Node = nil then
+    Exit;
+
+  vstRec.BeginUpdate;
+  try
+    repeat
+      if vstRec.Selected[Node] then
+        if FAllRecs[0].Actions[Node^.Index].ActionOptions.Action = acFindSubControl then
+        begin
+          FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapText := False;
+          FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapFiles := False;
+          FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchPrimitiveFiles := False;
+
+          case cmbNewMatchCriteria.ItemIndex of
+            0: FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapText := True;
+            1: FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapFiles := True;
+            2: FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchPrimitiveFiles := True;
+          end;
+        end;
+
+      Node := Node^.NextSibling;
+    until Node = nil;
+  finally
+    vstRec.EndUpdate;
+  end;
+end;
+
+
 procedure TfrmUIClickerRecMain.FormCreate(Sender: TObject);
 begin
   FLeftButtonDown.IsDown := False;
@@ -385,7 +689,36 @@ begin
   SetLength(FAllRecs[0].Actions, 0);
   SetLength(FAllRecs[0].Details, 0);
 
+  SaveBmpDir := ExtractFilePath(ParamStr(0)) + 'Bmps';
+
   tmrStartup.Enabled := True;
+end;
+
+
+procedure TfrmUIClickerRecMain.MenuItem_SaveRecordingAsClick(Sender: TObject);
+var
+  i: Integer;
+  ProjDir: string;
+begin
+  if SetProjectPath then
+  begin
+    ProjDir := GetBmpDirByProjectName;
+
+    for i := 0 to Length(FAllRecs[0].Details) - 1 do
+    begin
+      FAllRecs[0].Details[i].ScrShotPath := ProjDir + ExtractFileName(FAllRecs[0].Details[i].ScrShotPath);
+      FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].FindSubControlOptions.MatchBitmapFiles := FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath;
+    end;
+
+    SaveProject;
+    vstRec.Repaint; //repaint, in case the bmp paths are updated
+  end;
+end;
+
+
+procedure TfrmUIClickerRecMain.spdbtnExtraSaveClick(Sender: TObject);
+begin
+  pmExtraSave.PopUp;
 end;
 
 
@@ -519,7 +852,10 @@ begin
   if Column <> 1 then
     Exit;
 
-  ImageIndex := Ord(FAllRecs[0].Actions[Node^.Index].ActionOptions.Action);
+  try
+    ImageIndex := Ord(FAllRecs[0].Actions[Node^.Index].ActionOptions.Action);
+  except
+  end;
 end;
 
 
@@ -527,10 +863,35 @@ procedure TfrmUIClickerRecMain.vstRecGetImageIndexEx(Sender: TBaseVirtualTree;
   Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex;
   var Ghosted: boolean; var ImageIndex: integer; var ImageList: TCustomImageList);
 begin
-  if Column = 1 then
-  begin
-    ImageIndex := Ord(FAllRecs[0].Actions[Node^.Index].ActionOptions.Action);
-    ImageList := imglstActions16;
+  try
+    case Column of
+      1:
+      begin
+        ImageIndex := Ord(FAllRecs[0].Actions[Node^.Index].ActionOptions.Action);
+        ImageList := imglstActions16;
+      end;
+
+      4, 8:
+      begin
+        ImageList := imglstUsedMatchCriteriaSub;
+
+        if FAllRecs[0].Actions[Node^.Index].ActionOptions.Action <> acFindSubControl then
+        begin
+          ImageIndex := 3;
+          Exit;
+        end;
+
+        if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapText then
+          ImageIndex := 0;
+
+        if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapFiles then
+          ImageIndex := 1;
+
+        if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchPrimitiveFiles then
+          ImageIndex := 2;
+      end;
+    end;
+  except
   end;
 end;
 
@@ -539,35 +900,49 @@ procedure TfrmUIClickerRecMain.vstRecGetText(Sender: TBaseVirtualTree;
   Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType;
   var CellText: string);
 begin
-  case Column of
-    0: CellText := IntToStr(Node^.Index);
-    1: CellText := FAllRecs[0].Actions[Node^.Index].ActionOptions.ActionName;
-    2: CellText := CClkActionStr[FAllRecs[0].Actions[Node^.Index].ActionOptions.Action];
-    3: CellText := FAllRecs[0].Actions[Node^.Index].FindControlOptions.MatchClassName;
+  try
+    case Column of
+      0: CellText := IntToStr(Node^.Index);
+      1: CellText := FAllRecs[0].Actions[Node^.Index].ActionOptions.ActionName;
+      2: CellText := CClkActionStr[FAllRecs[0].Actions[Node^.Index].ActionOptions.Action];
+      3: CellText := FAllRecs[0].Actions[Node^.Index].FindControlOptions.MatchClassName;
 
-    4:
-    begin
-      case FAllRecs[0].Actions[Node^.Index].ActionOptions.Action of
-        acClick:
-          CellText := FAllRecs[0].Actions[Node^.Index].ActionOptions.ActionName;
+      4:
+      begin
+        case FAllRecs[0].Actions[Node^.Index].ActionOptions.Action of
+          acClick:
+            CellText := FAllRecs[0].Actions[Node^.Index].ActionOptions.ActionName;
 
-        acFindControl:
-          CellText := FAllRecs[0].Actions[Node^.Index].FindControlOptions.MatchText;
+          acFindControl:
+            CellText := FAllRecs[0].Actions[Node^.Index].FindControlOptions.MatchText;
 
-        acFindSubControl:
-          CellText := FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchText;
+          acFindSubControl:
+          begin
+            if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapText then
+              CellText := FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchText;
 
-        acSetVar:
-          CellText := Copy(FAllRecs[0].Actions[Node^.Index].SetVarOptions.ListOfVarNames, 1, 30) + '...';
+            if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchBitmapFiles then
+              CellText := FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchBitmapFiles;
 
-        else
-          CellText := 'Unimplemented';
+            if FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchCriteria.WillMatchPrimitiveFiles then
+              CellText := FAllRecs[0].Actions[Node^.Index].FindSubControlOptions.MatchPrimitiveFiles;
+          end;
+
+          acSetVar:
+            CellText := Copy(FAllRecs[0].Actions[Node^.Index].SetVarOptions.ListOfVarNames, 1, 30) + '...';
+
+          else
+            CellText := 'Unimplemented';
+        end;
       end;
-    end;
 
-    5: CellText := IntToStr(FAllRecs[0].Details[Node^.Index].ControlHandle);
-    6: CellText := DateTimeToStr(FAllRecs[0].Details[Node^.Index].Timestamp);
-    7: CellText := IntToStr(FAllRecs[0].Details[Node^.Index].ClickPoint.X) + ' : ' + IntToStr(FAllRecs[0].Details[Node^.Index].ClickPoint.Y);
+      5: CellText := IntToStr(FAllRecs[0].Details[Node^.Index].ControlHandle);
+      6: CellText := DateTimeToStr(FAllRecs[0].Details[Node^.Index].Timestamp);
+      7: CellText := IntToStr(FAllRecs[0].Details[Node^.Index].ClickPoint.X) + ' : ' + IntToStr(FAllRecs[0].Details[Node^.Index].ClickPoint.Y);
+      8: CellText := FAllRecs[0].Details[Node^.Index].ScrShotPath;
+    end;
+  except
+    CellText := 'Bug';
   end;
 end;
 
@@ -885,6 +1260,15 @@ begin
 end;
 
 
+function TfrmUIClickerRecMain.GetBmpFnmByTk: string;
+var
+  ProjDir: string;
+begin
+  ProjDir := GetBmpDirByProjectName;
+  Result := ProjDir + 'Bmp_' + IntToStr(GetTickCount64) + '.bmp';  //the same format is used when renaming in MenuItem_SaveRecordingAsClick
+end;
+
+
 procedure TfrmUIClickerRecMain.AddFindControlAction(var ATree: TCompRecArr; ACurrentNow: TDateTime; ALocalGroupID: string);
 var
   i: Integer;
@@ -900,6 +1284,7 @@ begin
       FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot := TBitmap.Create;
       ScreenShot(ATree[i].Handle, FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot, 0, 0, ATree[i].ComponentRectangle.Width, ATree[i].ComponentRectangle.Height);
       FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].GroupID := ALocalGroupID;
+      FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath := GetBmpFnmByTk;
 
       FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.Action := acFindControl;
       FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.ActionName := 'FindControl';
@@ -927,6 +1312,7 @@ begin
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot := TBitmap.Create;
   ScreenShot(AComp.Handle, FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot, 0, 0, AComp.ComponentRectangle.Width, AComp.ComponentRectangle.Height);
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].GroupID := ALocalGroupID;
+  FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath := GetBmpFnmByTk;
 
   FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.Action := acFindSubControl;
   FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.ActionName := 'FindSubControl';
@@ -960,6 +1346,8 @@ begin
   FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].FindSubControlOptions.MatchBitmapText[2].FontQuality := fqCleartype;
   //This will require more complex settings, with more profiles
   //The colors will have to be obtained from the screnshot and tested by UIClicker
+
+  FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].FindSubControlOptions.MatchBitmapFiles := FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath;
 end;
 
 
@@ -973,6 +1361,7 @@ begin
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot := TBitmap.Create;
   ScreenShot(AComp.Handle, FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot, 0, 0, AComp.ComponentRectangle.Width, AComp.ComponentRectangle.Height);
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].GroupID := ALocalGroupID;
+  FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath := GetBmpFnmByTk;
 
   FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.Action := acSetVar;
   FAllRecs[0].Actions[Length(FAllRecs[0].Actions) - 1].ActionOptions.ActionName := 'CacheControl';
@@ -999,6 +1388,7 @@ begin
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot := TBitmap.Create;
   ScreenShot(ATree[0].Handle, FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot, 0, 0, ATree[0].ComponentRectangle.Width, ATree[0].ComponentRectangle.Height);
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].GroupID := ALocalGroupID;
+  FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShotPath := GetBmpFnmByTk;
 
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot.Canvas.Pen.Color := clRed;
   FAllRecs[0].Details[Length(FAllRecs[0].Details) - 1].ScrShot.Canvas.Line(ATree[0].MouseXOffset, 0, ATree[0].MouseXOffset, ATree[0].ComponentRectangle.Height); //V
